@@ -1,0 +1,7 @@
+name: TempFly
+version: '${project.version}'
+main: me.theboykiss.ovh.tempfly.TempFly
+api-version: '1.20'
+commands:
+  tempfly:
+  fly:
