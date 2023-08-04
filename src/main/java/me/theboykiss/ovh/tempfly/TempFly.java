@@ -3,19 +3,41 @@ package me.theboykiss.ovh.tempfly;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.javacord.api.DiscordApi;
+import org.javacord.api.DiscordApiBuilder;
 
 import java.io.File;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 public class TempFly extends JavaPlugin {
 
     private static TempFly instance;
     private HashMap<String, Integer> coupons = new HashMap<>();
     private TempFlyCommand tempFlyCommand;
+    private DiscordApi discordApi;
+    private HikariDataSource dataSource;
+    private YamlConfiguration sqlConfig;
+    private boolean sqlEnabled;
+    private DatabaseManager databaseManager;
 
     @Override
     public void onEnable() {
+        saveDefaultConfig();
+        File sqlFile = new File(getDataFolder(), "sql.yml");
+        if (!sqlFile.exists()) {
+            saveResource("sql.yml", false);
+        }
+        DatabaseManager databaseManager = new DatabaseManager(sqlFile);
+        if (databaseManager.isSQLEnabled()) {
+            databaseManager.createTableIfNotExists();
+        }
+        new CouponTask(this).runTaskTimer(this, 0L, 20L * 60L * 60L);
         instance = this;
         if (!getDataFolder().exists()) {
             getDataFolder().mkdirs();
@@ -31,19 +53,29 @@ public class TempFly extends JavaPlugin {
             }
         }
         YamlConfiguration messages = YamlConfiguration.loadConfiguration(messagesFile);
-        tempFlyCommand = new TempFlyCommand(dataFile, messages);
+        tempFlyCommand = new TempFlyCommand(databaseManager, dataFile, messages, this);
         tempFlyCommand.loadData();
         this.getCommand("tempfly").setExecutor(tempFlyCommand);
-        getCommand("tempfly").setExecutor(new CouponCommand(tempFlyCommand));
+        getCommand("tempflyc").setExecutor(new CouponCommand(tempFlyCommand));
         this.getCommand("fly").setExecutor(new FlyCommand(tempFlyCommand));
         new BonusFlyTimeTask(tempFlyCommand).runTaskTimer(this, 0L, 24 * 60 * 60 * 20L);
         new TempFlyPlaceholderExpansion(tempFlyCommand).register();
+        discordApi = new DiscordApiBuilder().setToken(this.getDiscordToken()).login().join();
     }
+
 
     @Override
     public void onDisable() {
+        if (discordApi != null) {
+            discordApi.disconnect();
+        }
         tempFlyCommand.saveData();
         instance = null;
+        databaseManager.close();
+    }
+
+    public HikariDataSource getDataSource() {
+        return dataSource;
     }
 
     public static TempFly getInstance() {
@@ -72,8 +104,30 @@ public class TempFly extends JavaPlugin {
         }
     }
 
-
     public HashMap<String, Integer> getCoupons() {
         return coupons;
     }
+    public DiscordApi getDiscordApi() {
+        return discordApi;
+    }
+
+    public String getDiscordToken() {
+        return getConfig().getString("discord.token");
+    }
+
+    public long getDiscordChannelId() {
+        return getConfig().getLong("discord.channel-id");
+    }
+
+    public String getThumbnailUrl() {
+        return getConfig().getString("discord.thumbnail-url");
+    }
+
+    public Connection getDatabaseConnection() throws SQLException {
+        return dataSource.getConnection();
+    }
+    public DatabaseManager getDatabaseManager() {
+        return databaseManager;
+    }
+
 }

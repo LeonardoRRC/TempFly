@@ -11,20 +11,28 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.UUID;
 
 public class TempFlyCommand implements CommandExecutor {
 
+    private DatabaseManager databaseManager;
     private HashMap<UUID, Integer> flyTime = new HashMap<>();
     private File dataFile;
+    private TempFly plugin;
     private YamlConfiguration data;
     private YamlConfiguration messages;
 
-    public TempFlyCommand(File dataFile, YamlConfiguration messages) {
+    public TempFlyCommand(DatabaseManager databaseManager, File dataFile, YamlConfiguration messages, TempFly plugin) {
+        this.databaseManager = databaseManager;
         this.dataFile = dataFile;
         this.data = YamlConfiguration.loadConfiguration(dataFile);
         this.messages = messages;
+        this.plugin = plugin;
         startFlyTimer();
     }
 
@@ -55,30 +63,75 @@ public class TempFlyCommand implements CommandExecutor {
         return false;
     }
 
+    //public void setFlyTime(Player player, int time) {
+    //    flyTime.put(player.getUniqueId(), time);
+    //}
+
     public void setFlyTime(Player player, int time) {
-        flyTime.put(player.getUniqueId(), time);
+        UUID uuid = player.getUniqueId();
+        if (databaseManager.isSQLEnabled()) {
+            try (Connection connection = databaseManager.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("UPDATE fly_time SET time = ? WHERE uuid = ?")) {
+                statement.setInt(1, time);
+                statement.setString(2, uuid.toString());
+                statement.executeUpdate();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } else {
+            flyTime.put(uuid, time);
+        }
     }
 
+
+    //public void addFlyTime(Player player, int time) {
+    //    flyTime.put(player.getUniqueId(), flyTime.getOrDefault(player.getUniqueId(), 0) + time);
+    //}
+
     public void addFlyTime(Player player, int time) {
-        flyTime.put(player.getUniqueId(), flyTime.getOrDefault(player.getUniqueId(), 0) + time);
+        UUID uuid = player.getUniqueId();
+        if (databaseManager.isSQLEnabled()) {
+            try (Connection connection = databaseManager.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("UPDATE fly_time SET time = time + ? WHERE uuid = ?")) {
+                statement.setInt(1, time);
+                statement.setString(2, uuid.toString());
+                statement.executeUpdate();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } else {
+            flyTime.put(uuid, flyTime.getOrDefault(uuid, 0) + time);
+        }
     }
+
 
     private void startFlyTimer() {
         new BukkitRunnable() {
             @Override
             public void run() {
                 for (Player player : Bukkit.getOnlinePlayers()) {
-                    if (player.isFlying() && flyTime.containsKey(player.getUniqueId())) {
-                        int timeLeft = flyTime.get(player.getUniqueId());
+                    UUID uuid = player.getUniqueId();
+                    int timeLeft = getFlyTime(player);
+                    if (player.isFlying() && timeLeft > 0) {
                         if (timeLeft <= 0) {
                             player.setAllowFlight(false);
                             player.setFlying(false);
-                            flyTime.remove(player.getUniqueId());
+                            if (databaseManager.isSQLEnabled()) {
+                                try (Connection connection = databaseManager.getConnection();
+                                     PreparedStatement statement = connection.prepareStatement("DELETE FROM fly_time WHERE uuid = ?")) {
+                                    statement.setString(1, uuid.toString());
+                                    statement.executeUpdate();
+                                } catch (SQLException e) {
+                                    e.printStackTrace();
+                                }
+                            } else {
+                                flyTime.remove(uuid);
+                            }
                         } else if (timeLeft <= 10) {
                             player.sendTitle(getMessage("attention-title"), getMessage("flight-time-left").replace("{time}", String.valueOf(timeLeft)), 10, 70, 20);
-                            flyTime.put(player.getUniqueId(), timeLeft - 1);
+                            setFlyTime(player, timeLeft - 1);
                         } else {
-                            flyTime.put(player.getUniqueId(), timeLeft - 1);
+                            setFlyTime(player, timeLeft - 1);
                         }
                     }
                 }
@@ -86,11 +139,12 @@ public class TempFlyCommand implements CommandExecutor {
         }.runTaskTimer(TempFly.getInstance(), 0L, 20L);
     }
 
+
     public boolean hasFlyTime(Player player) {
         return flyTime.containsKey(player.getUniqueId());
     }
 
-    public void saveData() {
+    /*public void saveData() {
         for (UUID uuid : flyTime.keySet()) {
             data.set(uuid.toString(), flyTime.get(uuid));
         }
@@ -99,13 +153,62 @@ public class TempFlyCommand implements CommandExecutor {
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
+    }*/
 
-    public void loadData() {
-        for (String key : data.getKeys(false)) {
-            flyTime.put(UUID.fromString(key), data.getInt(key));
+    public void saveData() {
+        if (databaseManager.isSQLEnabled()) {
+            // Guardar datos en MySQL
+            try (Connection connection = databaseManager.getConnection()) {
+                for (UUID uuid : flyTime.keySet()) {
+                    try (PreparedStatement statement = connection.prepareStatement("UPDATE fly_time SET time = ? WHERE uuid = ?")) {
+                        statement.setInt(1, flyTime.get(uuid));
+                        statement.setString(2, uuid.toString());
+                        statement.executeUpdate();
+                    }
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } else {
+            // Guardar datos en archivo local
+            for (UUID uuid : flyTime.keySet()) {
+                data.set(uuid.toString(), flyTime.get(uuid));
+            }
+            try {
+                data.save(dataFile);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
+
+
+    //public void loadData() {
+    //    for (String key : data.getKeys(false)) {
+    //        flyTime.put(UUID.fromString(key), data.getInt(key));
+    //    }
+    //}
+
+    public void loadData() {
+        if (databaseManager.isSQLEnabled()) {
+            try (Connection connection = databaseManager.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("SELECT uuid, time FROM fly_time");
+                 ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    UUID uuid = UUID.fromString(resultSet.getString("uuid"));
+                    int time = resultSet.getInt("time");
+                    flyTime.put(uuid, time);
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        } else {
+            for (String key : data.getKeys(false)) {
+                flyTime.put(UUID.fromString(key), data.getInt(key));
+            }
+        }
+    }
+
 
     public String getMessage(String key) {
         if (messages.contains(key)) {
@@ -116,7 +219,23 @@ public class TempFlyCommand implements CommandExecutor {
     }
 
     public int getFlyTime(Player player) {
-        return flyTime.getOrDefault(player.getUniqueId(), 0);
+        UUID uuid = player.getUniqueId();
+        if (databaseManager.isSQLEnabled()) {
+            try (Connection connection = databaseManager.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("SELECT time FROM fly_time WHERE uuid = ?")) {
+                statement.setString(1, uuid.toString());
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    if (resultSet.next()) {
+                        return resultSet.getInt("time");
+                    }
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+            return 0;
+        } else {
+            return flyTime.getOrDefault(uuid, 0);
+        }
     }
 
 }
