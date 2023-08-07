@@ -54,8 +54,10 @@ public class TempFlyCommand implements CommandExecutor {
                 }
                 if (args[0].equalsIgnoreCase("set")) {
                     setFlyTime(target, time);
+                    sender.sendMessage(ChatColor.GREEN+ "Has establecido " + time + " al jugador " + target);
                 } else if (args[0].equalsIgnoreCase("give")) {
                     addFlyTime(target, time);
+                    sender.sendMessage(ChatColor.GREEN+ "Has agregado " + time + " al jugador " + target);
                 }
             }
             return true;
@@ -112,7 +114,7 @@ public class TempFlyCommand implements CommandExecutor {
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     UUID uuid = player.getUniqueId();
                     int timeLeft = getFlyTime(player);
-                    if (player.isFlying() && timeLeft > 0) {
+                    if (player.isFlying()) {
                         if (timeLeft <= 0) {
                             player.setAllowFlight(false);
                             player.setFlying(false);
@@ -134,6 +136,7 @@ public class TempFlyCommand implements CommandExecutor {
                             setFlyTime(player, timeLeft - 1);
                         }
                     }
+
                 }
             }
         }.runTaskTimer(TempFly.getInstance(), 0L, 20L);
@@ -141,8 +144,11 @@ public class TempFlyCommand implements CommandExecutor {
 
 
     public boolean hasFlyTime(Player player) {
-        return flyTime.containsKey(player.getUniqueId());
+        int time = flyTime.getOrDefault(player.getUniqueId(), 0);
+        return time > 0;
     }
+
+
 
     /*public void saveData() {
         for (UUID uuid : flyTime.keySet()) {

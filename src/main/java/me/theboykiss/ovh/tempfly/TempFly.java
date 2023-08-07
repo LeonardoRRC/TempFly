@@ -1,5 +1,6 @@
 package me.theboykiss.ovh.tempfly;
 
+import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -58,7 +59,9 @@ public class TempFly extends JavaPlugin {
         this.getCommand("tempfly").setExecutor(tempFlyCommand);
         getCommand("tempflyc").setExecutor(new CouponCommand(tempFlyCommand));
         this.getCommand("fly").setExecutor(new FlyCommand(tempFlyCommand));
-        new BonusFlyTimeTask(tempFlyCommand).runTaskTimer(this, 0L, 24 * 60 * 60 * 20L);
+        BonusFlyTimeTask bonusFlyTimeTask = new BonusFlyTimeTask(tempFlyCommand, getDataFolder());
+        //bonusFlyTimeTask.runTaskTimer(this, 0L, 20L * 60L * 60L);
+        getServer().getPluginManager().registerEvents(bonusFlyTimeTask, this);
         new TempFlyPlaceholderExpansion(tempFlyCommand).register();
         discordApi = new DiscordApiBuilder().setToken(this.getDiscordToken()).login().join();
     }
