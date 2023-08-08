@@ -26,10 +26,12 @@ public class TempFly extends JavaPlugin {
     private YamlConfiguration sqlConfig;
     private boolean sqlEnabled;
     private DatabaseManager databaseManager;
+    private boolean couponBotEnabled;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        couponBotEnabled = getConfig().getBoolean("coupon-bot-enabled", true);
         File sqlFile = new File(getDataFolder(), "sql.yml");
         if (!sqlFile.exists()) {
             saveResource("sql.yml", false);
@@ -38,7 +40,11 @@ public class TempFly extends JavaPlugin {
         if (databaseManager.isSQLEnabled()) {
             databaseManager.createTableIfNotExists();
         }
-        new CouponTask(this).runTaskTimer(this, 0L, 20L * 60L * 60L);
+        if (couponBotEnabled) {
+            new CouponTask(this).runTaskTimer(this, 0L, 20L * 60L * 60L);
+            discordApi = new DiscordApiBuilder().setToken(this.getDiscordToken()).login().join();
+        }
+
         instance = this;
         if (!getDataFolder().exists()) {
             getDataFolder().mkdirs();
@@ -60,10 +66,9 @@ public class TempFly extends JavaPlugin {
         getCommand("tempflyc").setExecutor(new CouponCommand(tempFlyCommand));
         this.getCommand("fly").setExecutor(new FlyCommand(tempFlyCommand));
         BonusFlyTimeTask bonusFlyTimeTask = new BonusFlyTimeTask(tempFlyCommand, getDataFolder());
-        //bonusFlyTimeTask.runTaskTimer(this, 0L, 20L * 60L * 60L);
         getServer().getPluginManager().registerEvents(bonusFlyTimeTask, this);
         new TempFlyPlaceholderExpansion(tempFlyCommand).register();
-        discordApi = new DiscordApiBuilder().setToken(this.getDiscordToken()).login().join();
+
     }
 
 
@@ -74,8 +79,11 @@ public class TempFly extends JavaPlugin {
         }
         tempFlyCommand.saveData();
         instance = null;
-        databaseManager.close();
+        if (databaseManager != null) {
+            databaseManager.close();
+        }
     }
+
 
     public HikariDataSource getDataSource() {
         return dataSource;
@@ -129,6 +137,11 @@ public class TempFly extends JavaPlugin {
     public Connection getDatabaseConnection() throws SQLException {
         return dataSource.getConnection();
     }
+
+    public boolean isCouponBotEnabled() {
+        return couponBotEnabled;
+    }
+
     public DatabaseManager getDatabaseManager() {
         return databaseManager;
     }

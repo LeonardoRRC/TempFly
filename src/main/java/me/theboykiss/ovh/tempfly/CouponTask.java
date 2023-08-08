@@ -16,8 +16,14 @@ public class CouponTask extends BukkitRunnable {
         this.plugin = plugin;
     }
 
+
     @Override
     public void run() {
+        // Verificar si el bot de cupones está habilitado
+        if (!TempFly.getInstance().isCouponBotEnabled()) {
+            return; // Si no está habilitado, simplemente sal del método
+        }
+
         String coupon = UUID.randomUUID().toString().substring(0, 8);
         plugin.getCoupons().put(coupon, 300);
 
@@ -27,7 +33,7 @@ public class CouponTask extends BukkitRunnable {
         if (channel != null) {
             EmbedBuilder embed = new EmbedBuilder()
                     .setTitle("¡Nuevo cupón disponible!")
-                    .setDescription("Canjéalo en nuestro servidor de Minecraft con `/tempfly canjear " + coupon + "` para obtener 5 minutos de vuelo.")
+                    .setDescription("Canjéalo en nuestro servidor de Minecraft con `/tempflyc canjear " + coupon + "` para obtener 5 minutos de vuelo.")
                     .setColor(Color.GREEN)
                     .setThumbnail(thumbnailUrl);
 
@@ -41,4 +47,5 @@ public class CouponTask extends BukkitRunnable {
             });
         }
     }
+
 }

@@ -115,6 +115,10 @@ public class TempFlyCommand implements CommandExecutor {
                     UUID uuid = player.getUniqueId();
                     int timeLeft = getFlyTime(player);
                     if (player.isFlying()) {
+                        if (player.hasPermission("tempfly.infinite")) {
+                            // Si el jugador tiene permiso de vuelo infinito, simplemente continuamos con el siguiente jugador.
+                            continue;
+                        }
                         if (timeLeft <= 0) {
                             player.setAllowFlight(false);
                             player.setFlying(false);
@@ -136,11 +140,11 @@ public class TempFlyCommand implements CommandExecutor {
                             setFlyTime(player, timeLeft - 1);
                         }
                     }
-
                 }
             }
         }.runTaskTimer(TempFly.getInstance(), 0L, 20L);
     }
+
 
 
     public boolean hasFlyTime(Player player) {
